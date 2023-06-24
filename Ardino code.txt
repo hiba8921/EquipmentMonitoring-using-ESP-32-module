@@ -1,0 +1,99 @@
+#define BLYNK_TEMPLATE_ID "TMPL3S_XdtidM"
+#define BLYNK_TEMPLATE_NAME "alerts"
+#define BLYNK_AUTH_TOKEN "TdOp48Nf15gZORkK_1t3yFs6nS4u0Yns"
+
+#include <OneWire.h> // include the OneWire library
+#include <DallasTemperature.h> // include the DallasTemperature library
+
+#define ONE_WIRE_BUS 5 // define the pin that the DS18B20 is connected to on the ESP32
+
+
+OneWire oneWire(ONE_WIRE_BUS); // create a OneWire instance
+DallasTemperature sensors(&oneWire); // create a DallasTemperature instance
+
+#define BLYNK_PRINT Serial
+#include <Preferences.h>
+#include <WiFi.h>
+#include <Esp32WifiManager.h>
+#include <BlynkSimpleEsp32.h>
+char ssid[] = "AndroidAP0CB8";  // type your wifi name
+char pass[] = "nmji8015";  // type your wifi password
+BlynkTimer timer;
+const int SW420_PIN = 14; // Define the pin number for the SW-420 sensor
+
+unsigned long lastTime = 0; // Keep track of the last time the sensor was triggered
+int vibrationCount = 0; // Count the number of vibrations
+const int sensorPin = A0;
+const int digitalPin = 33;
+char auth[] = BLYNK_AUTH_TOKEN;
+void sendtemp(){
+  sensors.begin();
+  sensors.requestTemperatures();
+  float t = sensors.getTempCByIndex(0); // temperature in celcius
+
+    Serial.println(t);
+    Blynk.virtualWrite(V5, t);
+    Serial.print("Temperature : ");
+    Serial.println(t);
+    if(t > 105){
+    Blynk.logEvent("temp-alert","Temperature Limit exceeded");
+  }
+}
+
+void sendvibration(){
+  pinMode(SW420_PIN, INPUT); // Set the sensor pin as input
+  int sensorValue = digitalRead(SW420_PIN); // Read the sensor value
+  
+  if (sensorValue == HIGH) { // If the sensor is triggered
+    unsigned long currentTime = millis(); // Get the current time
+    if (currentTime - lastTime > 50) { // If it has been more than 50ms since the last trigger
+      vibrationCount++; // Increment the vibration count
+      lastTime = currentTime; // Update the last trigger time
+    }
+  }
+  float frequency;// If it has been more than 1s since the last trigger
+    frequency = vibrationCount / 1.0; // Calculate the vibration frequency in Hz
+    Serial.print("Frequency: ");
+    Serial.print(frequency);
+    Serial.println(" Hz");
+    vibrationCount = 0; // Reset the vibration count
+    Blynk.virtualWrite(V0, frequency);
+  if(frequency>5){
+    Blynk.logEvent("vibration-alert","Vibration Limit exceeded");
+  }
+}
+
+void sendppm(){
+  pinMode(digitalPin, INPUT);
+  int analogValue = analogRead(sensorPin);
+  float voltage = analogValue * (5.0 / 1023.0); // Convert analog value to voltage
+  float ppm = (voltage - 0.4) * 25.0; // Convert voltage to ppm
+
+  int digitalValue = digitalRead(digitalPin);
+  
+  // Serial.print("Analog value: ");
+  // Serial.println(analogValue);
+  Serial.print("value in ppm: ");
+  Serial.println(ppm);
+  // Serial.print("Digital value: ");
+  // Serial.println(digitalValue);
+  Blynk.virtualWrite(V6, ppm);
+  if(ppm > 1500){
+    Blynk.logEvent("co-alert","CO emission Limit exceeded");
+  }
+}
+
+void setup() {
+  
+  Blynk.begin(auth, ssid, pass);
+  Serial.begin(9600);
+  timer.setInterval(2500L, sendtemp);
+  timer.setInterval(2500L, sendvibration);
+  timer.setInterval(2500L, sendppm);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+  delay(1000);
+}
